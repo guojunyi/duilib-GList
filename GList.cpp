@@ -34,7 +34,7 @@ bool GListVerticalScrollBar::DoPaint(HDC hDC, const RECT& rcPaint, CControlUI* p
 	
 }
 
-void GListVerticalScrollBar::setListView(GList *view) {
+void GListVerticalScrollBar::SetListView(GList *view) {
 	listView_ = view;
 }
 
@@ -85,7 +85,7 @@ void GListVerticalScrollBar::DoEvent(TEventUI& event) {
 			if (p*range_ - pos_ > 2 | p*range_ - pos_<-2) {
 				pos_ = p*range_;
 				//GLog("UIEVENT_BUTTONDOWN:%d,%d\n", downMarginTop_, offset);
-				listView_->scrollTo(0, pos_);
+				listView_->ScrollTo(0, pos_);
 				listView_->Invalidate();
 			}
 			
@@ -105,7 +105,6 @@ void GListVerticalScrollBar::DoEvent(TEventUI& event) {
 			scrolling_ = true;
 			downPointY_ = scrollBarY;
 			downMarginTop_ = scrollTop;
-			//GLog("UIEVENT_BUTTONDOWN:%d %d\n", scrollBarX, scrollBarY);
 			listView_->Invalidate();
 		}
 		
@@ -115,7 +114,11 @@ void GListVerticalScrollBar::DoEvent(TEventUI& event) {
 		scrolling_ = false;
 		listView_->Invalidate();
 	}
+
 }
+
+
+
 
 
 GList::GList() {
@@ -125,10 +128,14 @@ GList::GList() {
 	firstVisibleItemIndex_ = 0;
 	lastVisibleItemIndex_ = 0;
 	inited_ = false;
+	pVerticalLayout_ = new CVerticalLayoutUI();
 }
 
 GList::~GList() {
-
+	pVerticalLayout_->Delete();
+	if (NULL != pVerticalScrollBar_) {
+		pVerticalScrollBar_->Delete();
+	}
 }
 
 
@@ -142,12 +149,12 @@ void GList::SetPos(RECT rc, bool bNeedInvalidate) {
 	if (!inited_) {
 		inited_ = true;
 		pVerticalScrollBar_ = new GListVerticalScrollBar();
-		pVerticalScrollBar_->setListView(this);
+		pVerticalScrollBar_->SetListView(this);
 		//pVerticalScrollBar_->SetBkColor(0xfff23232);
 
 		RECT rc = this->GetPos();
 		pVerticalScrollBar_->SetPos({
-			rc.left + this->GetWidth() - 10,
+			rc.left + this->GetWidth() - 8,
 			rc.top,
 			rc.left + this->GetWidth(),
 			rc.bottom
@@ -162,7 +169,7 @@ void GList::SetPos(RECT rc, bool bNeedInvalidate) {
 			this->ReloadData();
 			RECT rc = this->GetPos();
 			pVerticalScrollBar_->SetPos({
-				rc.left + this->GetWidth() - 10,
+				rc.left + this->GetWidth() - 8,
 				rc.top,
 				rc.left + this->GetWidth(),
 				rc.bottom
@@ -171,9 +178,6 @@ void GList::SetPos(RECT rc, bool bNeedInvalidate) {
 	}
 
 	pVerticalScrollBar_->SetScrollRange(contentSize_-this->GetHeight());
-	
-
-	//
 }
 
 void GList::ReloadData() {
@@ -197,40 +201,7 @@ void GList::ReloadData() {
 		firstVisibleItemIndex_ = 0;
 		lastVisibleItemIndex_ = count - 1;
 	}else {
-		int topSize = 0;
-		for (int i = 0; i < count; i++) {
-			int itemHeight = pDataCallback_->GetItemHeight(this, i);
-			int itemSeparatorHeight = pDataCallback_->GetItemSeparatorHeight(this, i);
-			topSize += itemHeight;
-			topSize += itemSeparatorHeight;
-
-			if (topSize >= scrollY_) {
-				firstVisibleItemIndex_ = i;
-				break;
-			}
-		}
-
-
-		topSize = 0;
-		for (int i = 0; i < firstVisibleItemIndex_; i++) {
-			topSize += pDataCallback_->GetItemHeight(this, i);
-			topSize += pDataCallback_->GetItemSeparatorHeight(this, i);
-		}
-		topSize = topSize-scrollY_;
-
-		for (int i = firstVisibleItemIndex_; i < pDataCallback_->GetCount(this); i++) {
-			int itemHeight = pDataCallback_->GetItemHeight(this, i);
-			topSize += itemHeight;
-			
-
-			if (topSize >= this->GetHeight()) {
-				lastVisibleItemIndex_ = i;
-				break;
-			}
-
-			topSize += pDataCallback_->GetItemSeparatorHeight(this, i);
-		}
-		
+		int topSize = CalculateFirstAndLastVisibleItemIndex();
 	}
 
 
@@ -271,7 +242,7 @@ void GList::ReloadData() {
 			CControlUI *item = pDataCallback_->GetItemView(this, lastVisibleItemIndex_);
 			RECT lastVisibleItemRc = item->GetRelativePos();
 			if (lastVisibleItemRc.bottom < this->GetHeight()) {
-				scroll(0, lastVisibleItemRc.bottom - this->GetHeight());
+				Scroll(0, lastVisibleItemRc.bottom - this->GetHeight());
 			}
 		}
 		
@@ -281,8 +252,9 @@ void GList::ReloadData() {
 }
 
 
-//事件管理
 void GList::DoEvent(TEventUI& event) {
+	
+	
 
 	if (event.Type == UIEVENT_SCROLLWHEEL) {
 		//GLog("UIEVENT_SCROLLWHEEL %d\n", event.wParam);
@@ -291,28 +263,60 @@ void GList::DoEvent(TEventUI& event) {
 			//GLog("%d %d %d\n", this->getContentSize(), this->GetHeight(), scrollY_);
 			if (this->getContentSize() > this->GetHeight()
 				&& scrollY_ < (this->getContentSize() - this->GetHeight())) {
-				scroll(0, -30);
+				Scroll(0, -30);
 				Invalidate();
 			}
 		}
 		else {
 			if (scrollY_ <= 0) {
-				this->scrollTo(0, 0);
+				this->ScrollTo(0, 0);
 			}
 			else {
-				this->scroll(0, 30);
+				this->Scroll(0, 30);
 				Invalidate();
 			}
 
 		}
 	}
 
-	
 
+	
 	pVerticalScrollBar_->DoEvent(event);
-	//GLog("event:%d\n", event.Type);
-	//CContainerUI::DoEvent(event);
+	
+	this->dispatchEvent(event);
+
+	CControlUI::DoEvent(event);
+	
 }
+
+void GList::dispatchEvent(TEventUI &event) {
+	for (int it = 0; it < items_.GetSize(); it++) {
+		CControlUI* pControl = static_cast<CControlUI*>(items_[it]);
+
+
+		LPCTSTR lp = pControl->GetClass();
+		int num1 = WideCharToMultiByte(CP_OEMCP, NULL, lp, -1, NULL, 0, NULL, FALSE);
+		char *pchar = new char[num1];
+		WideCharToMultiByte(CP_OEMCP, NULL, lp, -1, pchar, num1, NULL, FALSE);
+
+		if (lp == _T("HorizontalLayout")) {
+			
+			CContainerUI *pContainer = (CContainerUI *)pControl;
+
+			for (int i = 0; i<pContainer->GetCount(); i++) {
+				CControlUI* item = pContainer->GetItemAt(i);
+				item->DoEvent(event);
+			}
+			
+		}
+		else {
+			pControl->DoEvent(event);
+		}
+		GLog("dispatch:%s\n", pchar);
+		
+	}
+}
+
 
 void GList::RemoveAll() {
 	for (int it = 0;it < items_.GetSize(); it++) {
@@ -323,14 +327,13 @@ void GList::RemoveAll() {
 }
 
 void GList::Add(CControlUI *item) {
-	if (m_pManager != NULL) m_pManager->InitControls(item, this);
+	if (m_pManager != NULL) {
+		m_pManager->InitControls(item, NULL);
+	}
 	items_.Add(item);
 }
 
-void GList::scrollTo(int cx, int cy) {
-	scrollY_ = cy;
-
-
+int GList::CalculateFirstAndLastVisibleItemIndex() {
 	int topSize = 0;
 	for (int i = 0; i < pDataCallback_->GetCount(this); i++) {
 		int itemHeight = pDataCallback_->GetItemHeight(this, i);
@@ -362,6 +365,14 @@ void GList::scrollTo(int cx, int cy) {
 		topSize2 += pDataCallback_->GetItemSeparatorHeight(this, i);
 	}
 
+	return topSize;
+}
+
+void GList::ScrollTo(int cx, int cy) {
+	scrollY_ = cy;
+
+	int topSize = this->CalculateFirstAndLastVisibleItemIndex();
+	
 
 	this->RemoveAll();
 
@@ -387,7 +398,7 @@ void GList::scrollTo(int cx, int cy) {
 	pVerticalScrollBar_->SetScrollPos(scrollY_);
 }
 
-void GList::scroll(int offsetX, int offsetY) {
+void GList::Scroll(int offsetX, int offsetY) {
 	if (NULL == pDataCallback_) {
 		return;
 	}
@@ -405,40 +416,8 @@ void GList::scroll(int offsetX, int offsetY) {
 	scrollY_ -= offsetY;
 
 
-	int topSize = 0;
-	for (int i = 0; i < pDataCallback_->GetCount(this); i++) {
-		int itemHeight = pDataCallback_->GetItemHeight(this, i);
-		int itemSeparatorHeight = pDataCallback_->GetItemSeparatorHeight(this, i);
-		topSize += itemHeight;
-		topSize += itemSeparatorHeight;
-
-		if (topSize >= scrollY_) {
-			firstVisibleItemIndex_ = i;
-			topSize -= itemHeight;
-			topSize -= itemSeparatorHeight;
-			break;
-		}
-	}
-
-
-
-	int topSize2 = topSize - scrollY_;
-
-	for (int i = firstVisibleItemIndex_; i < pDataCallback_->GetCount(this); i++) {
-		int itemHeight = pDataCallback_->GetItemHeight(this, i);
-		topSize2 += itemHeight;
-
-		if (topSize2 >= this->GetHeight()) {
-			lastVisibleItemIndex_ = i;
-			break;
-		}
-
-		topSize2 += pDataCallback_->GetItemSeparatorHeight(this, i);
-	}
-
-
+	int topSize = this->CalculateFirstAndLastVisibleItemIndex();
 	this->RemoveAll();
-
 	RECT rc = this->GetPos();
 	int marginTop = rc.top + topSize - scrollY_;
 	for (int i = firstVisibleItemIndex_; i <= lastVisibleItemIndex_; i++) {

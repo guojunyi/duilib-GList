@@ -17,6 +17,7 @@ public:
 	virtual CControlUI* GetItemView(GList* pList, int iItem) = 0;
 };
 
+
 class GListVerticalScrollBar : public CControlUI {
 public:
 	GListVerticalScrollBar();
@@ -29,7 +30,7 @@ public:
 
 	void DoEvent(TEventUI& event);
 
-	void setListView(GList *view);
+	void SetListView(GList *view);
 protected:
 	int GetThumbHeight();
 
@@ -54,19 +55,13 @@ public:
 
 	~GList();
 
-	void DoEvent(TEventUI& event);
-
 	void SetDataCallback(IListDataCallback *pCallback);
 
 	void ReloadData();
 
-	void Add(CControlUI *item);
+	void Scroll(int offsetX, int offsetY);
 
-	void RemoveAll();
-
-	void scroll(int offsetX, int offsetY);
-
-	void scrollTo(int cx, int cy);
+	void ScrollTo(int cx, int cy);
 protected:
 
 	bool DoPaint(HDC hDC, const RECT& rcPaint, CControlUI* pStopControl);
@@ -75,7 +70,16 @@ protected:
 
 	int getContentSize();
 
+	void DoEvent(TEventUI& event);
 private:
+	void dispatchEvent(TEventUI &event);
+
+	int CalculateFirstAndLastVisibleItemIndex();
+
+	void Add(CControlUI *item);
+
+	void RemoveAll();
+
 	CDuiPtrArray items_;
 
 	IListDataCallback *pDataCallback_;
@@ -91,6 +95,8 @@ private:
 	bool inited_;
 
 	GListVerticalScrollBar *pVerticalScrollBar_;
+
+	CVerticalLayoutUI *pVerticalLayout_;
 
 	int windowWidth_;
 
